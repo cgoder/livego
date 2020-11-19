@@ -19,6 +19,7 @@ const (
 	idSetPeerBandwidth
 )
 
+// rtmp连接
 type Conn struct {
 	net.Conn
 	chunkSize           uint32
@@ -32,6 +33,7 @@ type Conn struct {
 	chunks              map[uint32]ChunkStream
 }
 
+// 新建rtmp连接
 func NewConn(c net.Conn, bufferSize int) *Conn {
 	return &Conn{
 		Conn:                c,
@@ -45,6 +47,7 @@ func NewConn(c net.Conn, bufferSize int) *Conn {
 	}
 }
 
+// rtmp读数据
 func (conn *Conn) Read(c *ChunkStream) error {
 	for {
 		h, _ := conn.rw.ReadUintBE(1)
@@ -79,6 +82,7 @@ func (conn *Conn) Read(c *ChunkStream) error {
 	return nil
 }
 
+// rtmp写数据
 func (conn *Conn) Write(c *ChunkStream) error {
 	if c.TypeID == idSetChunkSize {
 		conn.chunkSize = binary.BigEndian.Uint32(c.Data)

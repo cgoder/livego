@@ -57,6 +57,7 @@ type GopCache struct {
 	gops      []*array
 }
 
+// 创建GOP缓存
 func NewGopCache(num int) *GopCache {
 	return &GopCache{
 		count: num,
@@ -75,6 +76,7 @@ func (gopCache *GopCache) writeToArray(chunk *av.Packet, startNew bool) error {
 		} else {
 			ginc.reset()
 		}
+		// 平均分布寻找下一个gop cache slice.
 		gopCache.nextindex = (gopCache.nextindex + 1) % gopCache.count
 	} else {
 		ginc = gopCache.gops[(gopCache.nextindex+1)%gopCache.count]
@@ -84,6 +86,7 @@ func (gopCache *GopCache) writeToArray(chunk *av.Packet, startNew bool) error {
 	return nil
 }
 
+// 缓存GOP
 func (gopCache *GopCache) Write(p *av.Packet) {
 	var ok bool
 	if p.IsVideo {
@@ -92,6 +95,7 @@ func (gopCache *GopCache) Write(p *av.Packet) {
 			ok = true
 		}
 	}
+	// 若是keyFrame，或者刚开始缓存GOP，则将帧数据填充新的gop slice；否则平均填充gop slice。
 	if ok || gopCache.start {
 		gopCache.start = true
 		gopCache.writeToArray(p, ok)
@@ -115,6 +119,7 @@ func (gopCache *GopCache) sendTo(w av.WriteCloser) error {
 	return nil
 }
 
+// 写GOP
 func (gopCache *GopCache) Send(w av.WriteCloser) error {
 	return gopCache.sendTo(w)
 }

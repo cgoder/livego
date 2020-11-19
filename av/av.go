@@ -113,7 +113,7 @@ type Handler interface {
 	HandleWriter(WriteCloser)
 }
 
-// 流状态
+// 流状态接口
 type Alive interface {
 	Alive() bool
 }
@@ -129,7 +129,7 @@ type CalcTime interface {
 
 // 流信息
 type Info struct {
-	Key   string
+	Key   string	// 源流service的key
 	URL   string
 	UID   string
 	Inter bool

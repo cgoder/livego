@@ -3,6 +3,7 @@ package cache
 import (
 	"github.com/gwuhaolin/livego/av"
 	"github.com/gwuhaolin/livego/configure"
+	log "github.com/sirupsen/logrus"
 )
 
 type Cache struct {
@@ -14,6 +15,7 @@ type Cache struct {
 
 func NewCache() *Cache {
 	return &Cache{
+		// 初始化GOP缓冲区，大小可配置
 		gop:      NewGopCache(configure.Config.GetInt("gop_num")),
 		videoSeq: NewSpecialCache(),
 		audioSeq: NewSpecialCache(),
@@ -21,11 +23,14 @@ func NewCache() *Cache {
 	}
 }
 
+// 源流数据帧写到缓存
 func (cache *Cache) Write(p av.Packet) {
+	// metadata
 	if p.IsMetadata {
 		cache.metadata.Write(&p)
 		return
 	} else {
+		// audio
 		if !p.IsVideo {
 			ah, ok := p.Header.(av.AudioPacketHeader)
 			if ok {
@@ -34,11 +39,13 @@ func (cache *Cache) Write(p av.Packet) {
 					cache.audioSeq.Write(&p)
 					return
 				} else {
+					log.Debugf("unsupport audio fomat!\n")
 					return
 				}
 			}
 
 		} else {
+			// video
 			vh, ok := p.Header.(av.VideoPacketHeader)
 			if ok {
 				if vh.IsSeq() {
@@ -46,14 +53,17 @@ func (cache *Cache) Write(p av.Packet) {
 					return
 				}
 			} else {
+				log.Debugf("unsupport video fomat!\n")
 				return
 			}
 
 		}
 	}
+	// write gop
 	cache.gop.Write(&p)
 }
 
+// 写流数据帧
 func (cache *Cache) Send(w av.WriteCloser) error {
 	if err := cache.metadata.Send(w); err != nil {
 		return err

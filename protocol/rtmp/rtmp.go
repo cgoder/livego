@@ -33,6 +33,7 @@ type Client struct {
 	getter  av.GetWriter
 }
 
+// 创建rtmp cliet。
 func NewRtmpClient(h av.Handler, getter av.GetWriter) *Client {
 	return &Client{
 		handler: h,
@@ -40,16 +41,20 @@ func NewRtmpClient(h av.Handler, getter av.GetWriter) *Client {
 	}
 }
 
+// 连接rtmp流
 func (c *Client) Dial(url string, method string) error {
 	connClient := core.NewConnClient()
 	if err := connClient.Start(url, method); err != nil {
 		return err
 	}
+
 	if method == av.PUBLISH {
+		// 写rtmp目标流
 		writer := NewVirWriter(connClient)
 		log.Debugf("client Dial call NewVirWriter url=%s, method=%s", url, method)
 		c.handler.HandleWriter(writer)
 	} else if method == av.PLAY {
+		// 读rtmp源流
 		reader := NewVirReader(connClient)
 		log.Debugf("client Dial call NewVirReader url=%s, method=%s", url, method)
 		c.handler.HandleReader(reader)
@@ -65,11 +70,13 @@ func (c *Client) GetHandle() av.Handler {
 	return c.handler
 }
 
+// rtmp server 结构。
 type Server struct {
 	handler av.Handler
 	getter  av.GetWriter
 }
 
+// 创建rtmp server。
 func NewRtmpServer(h av.Handler, getter av.GetWriter) *Server {
 	return &Server{
 		handler: h,
@@ -77,6 +84,7 @@ func NewRtmpServer(h av.Handler, getter av.GetWriter) *Server {
 	}
 }
 
+// rtmp流媒体服务
 func (s *Server) Serve(listener net.Listener) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -85,6 +93,7 @@ func (s *Server) Serve(listener net.Listener) (err error) {
 	}()
 
 	for {
+		// 等待连接，并分配协程处理。读源流及写目标流均独立处理。
 		var netconn net.Conn
 		netconn, err = listener.Accept()
 		if err != nil {
@@ -97,6 +106,7 @@ func (s *Server) Serve(listener net.Listener) (err error) {
 	}
 }
 
+// 流媒体服务处理连接请求。可接受推流/拉流。
 func (s *Server) handleConn(conn *core.Conn) error {
 	if err := conn.HandshakeServer(); err != nil {
 		conn.Close()
@@ -122,6 +132,7 @@ func (s *Server) handleConn(conn *core.Conn) error {
 
 	log.Debugf("handleConn: IsPublisher=%v", connServer.IsPublisher())
 	if connServer.IsPublisher() {
+		// 接收推流
 		channel, err := configure.RoomKeys.GetChannel(name)
 		if err != nil {
 			err := fmt.Errorf("invalid key err=%s", err.Error())
@@ -147,6 +158,7 @@ func (s *Server) handleConn(conn *core.Conn) error {
 		flvWriter := new(flv.FlvDvr)
 		s.handler.HandleWriter(flvWriter.GetWriter(reader.Info()))
 	} else {
+		// 接收拉流
 		writer := NewVirWriter(connServer)
 		log.Debugf("new player: %+v", writer.Info())
 		s.handler.HandleWriter(writer)

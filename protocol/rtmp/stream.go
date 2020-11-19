@@ -39,15 +39,20 @@ func (ss *StreamServer) HandleReader(r av.ReadCloser) {
 	log.Debugf("HandleReader: info[%v]", info)
 
 	var service *StreamService
+	// 查找是否存在此源流service的key。
 	i, ok := ss.services.Load(info.Key)
 	if service, ok = i.(*StreamService); ok {
+		// 若已存在此源流key的service，则停止旧service。
 		service.TransStop()
+		// 旧源流ID是否与新源流ID一致，不一致则新建service，并替换旧service。
 		id := service.ID()
 		if id != EmptyID && id != info.UID {
 			ns := NewStreamService()
 			service.Copy(ns)
 			service = ns
 			ss.services.Store(info.Key, ns)
+		} else {
+			log.Debugf("renew service reader.")
 		}
 	} else {
 		service = NewStreamService()
@@ -82,32 +87,39 @@ func (ss *StreamServer) GetServices() *sync.Map {
 	return ss.services
 }
 
-// 定时遍历检测所有媒体服务器
+// 定时遍历检测所有媒体服务状态。如果状态为关闭，则删除此服务。
 func (ss *StreamServer) CheckAlive(ttl uint) {
-
 	if ttl <= 1 {
 		ttl = 1
 	}
 
+	d := time.Duration(ttl) * time.Second
+	t := time.NewTimer(d)
+	defer t.Stop()
+
 	for {
-		<-time.After(time.Duration(ttl) * time.Second)
-		ss.services.Range(func(key, val interface{}) bool {
-			v := val.(*StreamService)
-			if v.CheckAlive() == 0 {
-				ss.services.Delete(key)
-			}
-			return true
-		})
+		select {
+		case <-t.C:
+			ss.services.Range(func(key, val interface{}) bool {
+				v := val.(*StreamService)
+				if v.CheckAlive() == 0 {
+					ss.services.Delete(key)
+				}
+				return true
+			})
+			t.Reset(d)
+			// default:
+		}
 	}
 }
 
 // 流媒体服务结构信息
 type StreamService struct {
-	isStart bool
-	info    av.Info       // 源流信息
-	cache   *cache.Cache  // 源流视频数据
-	r       av.ReadCloser // 读源流handler
-	ws      *sync.Map     // 推流目标地址集合
+	stop  chan bool
+	info  av.Info       // 源流信息
+	cache *cache.Cache  // 源流视频数据缓冲区
+	r     av.ReadCloser // 读源流handler
+	ws    *sync.Map     // 推流目标地址集合。key为流UID，value为写流PackWriterCloser
 }
 
 // 写流数据
@@ -325,9 +337,8 @@ func (s *StreamService) SendStaticPush(packet av.Packet) {
 	}
 }
 
-// 流媒体服务读取源流数据协程
+// 流媒体服务读取源流数据，并缓存，向所有目标流地址写数据。
 func (s *StreamService) TransStart() {
-	s.isStart = true
 	var p av.Packet
 
 	log.Debugf("TransStart: %v", s.info)
@@ -335,61 +346,66 @@ func (s *StreamService) TransStart() {
 	s.StartStaticPush()
 
 	for {
-		if !s.isStart {
-			s.closeInter()
-			return
-		}
-		err := s.r.Read(&p)
-		if err != nil {
-			s.closeInter()
-			s.isStart = false
-			return
-		}
-
-		if s.IsSendStaticPush() {
-			s.SendStaticPush(p)
-		}
-
-		s.cache.Write(p)
-
-		s.ws.Range(func(key, val interface{}) bool {
-			v := val.(*PackWriterCloser)
-			if !v.init {
-				//log.Debugf("cache.send: %v", v.w.Info())
-				if err = s.cache.Send(v.w); err != nil {
-					log.Debugf("[%s] send cache packet error: %v, remove", v.w.Info(), err)
-					s.ws.Delete(key)
-					return true
-				}
-				v.init = true
-			} else {
-				newPacket := p
-				//writeType := reflect.TypeOf(v.w)
-				//log.Debugf("w.Write: type=%v, %v", writeType, v.w.Info())
-				if err = v.w.Write(&newPacket); err != nil {
-					log.Debugf("[%s] write packet error: %v, remove", v.w.Info(), err)
-					s.ws.Delete(key)
-				}
+		select {
+		// 退出
+		case <-s.stop:
+			if s.r != nil {
+				s.r.Close(fmt.Errorf("stop service"))
 			}
-			return true
-		})
+			s.close()
+			break
+		// 正常读取源流并写目标流
+		default:
+			// 如果读取源流出错，则关闭此流媒体服务。
+			err := s.r.Read(&p)
+			if err != nil {
+				log.Debugf("read source stream erro! stop service.")
+				s.stop <- true
+				continue
+			}
+
+			if s.IsSendStaticPush() {
+				s.SendStaticPush(p)
+			}
+
+			// 缓存读取到的源流帧数据
+			s.cache.Write(p)
+
+			// 向每个目标流地址写源流帧数据
+			s.ws.Range(func(key, val interface{}) bool {
+				v := val.(*PackWriterCloser)
+				if !v.init {
+					//log.Debugf("cache.send: %v", v.w.Info())
+					if err = s.cache.Send(v.w); err != nil {
+						log.Debugf("[%s] send cache packet error: %v, remove", v.w.Info(), err)
+						s.ws.Delete(key)
+						return true
+					}
+					v.init = true
+				} else {
+					newPacket := p
+					//writeType := reflect.TypeOf(v.w)
+					//log.Debugf("w.Write: type=%v, %v", writeType, v.w.Info())
+					if err = v.w.Write(&newPacket); err != nil {
+						log.Debugf("[%s] write packet error: %v, remove", v.w.Info(), err)
+						s.ws.Delete(key)
+					}
+				}
+				return true
+			})
+		}
 	}
 }
 
-// 停止读取源流，并重置状态。
+// 停止读取源流，并关闭流媒体服务。
 func (s *StreamService) TransStop() {
 	log.Debugf("TransStop: %s", s.info.Key)
-
-	if s.isStart && s.r != nil {
-		s.r.Close(fmt.Errorf("stop old"))
-	}
-
-	s.isStart = false
+	s.stop <- true
 }
 
-// 检测某个媒体服务器状态
+// 检测某个媒体服务状态
 func (s *StreamService) CheckAlive() (n int) {
-	if s.r != nil && s.isStart {
+	if s.r != nil {
 		if s.r.Alive() {
 			n++
 		} else {
@@ -401,7 +417,7 @@ func (s *StreamService) CheckAlive() (n int) {
 		v := val.(*PackWriterCloser)
 		if v.w != nil {
 			//Alive from RWBaser, check last frame now - timestamp, if > timeout then Remove it
-			if !v.w.Alive() && s.isStart {
+			if !v.w.Alive() {
 				log.Infof("write timeout remove")
 				s.ws.Delete(key)
 				v.w.Close(fmt.Errorf("write timeout"))
@@ -415,7 +431,8 @@ func (s *StreamService) CheckAlive() (n int) {
 	return
 }
 
-func (s *StreamService) closeInter() {
+// 关闭流媒体服务。
+func (s *StreamService) close() {
 	if s.r != nil {
 		s.StopStaticPush()
 		log.Debugf("[%v] publisher closed", s.r.Info())
