@@ -39,7 +39,7 @@ func (cache *Cache) Write(p av.Packet) {
 					cache.audioSeq.Write(&p)
 					return
 				} else {
-					log.Debugf("unsupport audio fomat!\n")
+					log.Debugf("unsupport audio fomat! ft:%v,acctype:%v\n", ah.SoundFormat(), ah.AACPacketType())
 					return
 				}
 			}

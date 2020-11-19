@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gwuhaolin/livego/av"
-	"github.com/gwuhaolin/livego/protocol/rtmp"
+	"github.com/gwuhaolin/livego/service"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -46,14 +46,14 @@ func (server *Server) Serve(l net.Listener) error {
 
 // 获取发布和播放器的信息
 func (server *Server) getStreams(w http.ResponseWriter, r *http.Request) *streams {
-	rtmpStream := server.handler.(*rtmp.StreamServer)
+	rtmpStream := server.handler.(*service.StreamServer)
 	if rtmpStream == nil {
 		return nil
 	}
 	msgs := new(streams)
 
 	rtmpStream.GetServices().Range(func(key, val interface{}) bool {
-		if s, ok := val.(*rtmp.StreamService); ok {
+		if s, ok := val.(*service.StreamService); ok {
 			if s.GetReader() != nil {
 				msg := stream{key.(string), s.GetReader().Info().UID}
 				msgs.Publishers = append(msgs.Publishers, msg)
@@ -63,10 +63,10 @@ func (server *Server) getStreams(w http.ResponseWriter, r *http.Request) *stream
 	})
 
 	rtmpStream.GetServices().Range(func(key, val interface{}) bool {
-		ws := val.(*rtmp.StreamService).GetWs()
+		ws := val.(*service.StreamService).GetWs()
 
 		ws.Range(func(k, v interface{}) bool {
-			if pw, ok := v.(*rtmp.PackWriterCloser); ok {
+			if pw, ok := v.(*service.PackWriterCloser); ok {
 				if pw.GetWriter() != nil {
 					msg := stream{key.(string), pw.GetWriter().Info().UID}
 					msgs.Players = append(msgs.Players, msg)

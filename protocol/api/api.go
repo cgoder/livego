@@ -10,6 +10,7 @@ import (
 	"github.com/gwuhaolin/livego/configure"
 	"github.com/gwuhaolin/livego/protocol/rtmp"
 	"github.com/gwuhaolin/livego/protocol/rtmp/rtmprelay"
+	"github.com/gwuhaolin/livego/service"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
@@ -152,7 +153,7 @@ func (server *Server) GetLiveStatics(w http.ResponseWriter, req *http.Request) {
 
 	defer res.SendJson()
 
-	rtmpStream := server.handler.(*rtmp.StreamServer)
+	rtmpStream := server.handler.(*service.StreamServer)
 	if rtmpStream == nil {
 		res.Status = 500
 		res.Data = "Get rtmp stream information error"
@@ -162,7 +163,7 @@ func (server *Server) GetLiveStatics(w http.ResponseWriter, req *http.Request) {
 	msgs := new(streams)
 
 	rtmpStream.GetServices().Range(func(key, val interface{}) bool {
-		if s, ok := val.(*rtmp.StreamService); ok {
+		if s, ok := val.(*service.StreamService); ok {
 			if s.GetReader() != nil {
 				switch s.GetReader().(type) {
 				case *rtmp.VirReader:
@@ -177,9 +178,9 @@ func (server *Server) GetLiveStatics(w http.ResponseWriter, req *http.Request) {
 	})
 
 	rtmpStream.GetServices().Range(func(key, val interface{}) bool {
-		ws := val.(*rtmp.StreamService).GetWs()
+		ws := val.(*service.StreamService).GetWs()
 		ws.Range(func(k, v interface{}) bool {
-			if pw, ok := v.(*rtmp.PackWriterCloser); ok {
+			if pw, ok := v.(*service.PackWriterCloser); ok {
 				if pw.GetWriter() != nil {
 					switch pw.GetWriter().(type) {
 					case *rtmp.VirWriter:

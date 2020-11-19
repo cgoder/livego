@@ -1,7 +1,8 @@
-package rtmp
+package service
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -375,7 +376,7 @@ func (s *StreamService) TransStart() {
 			s.ws.Range(func(key, val interface{}) bool {
 				v := val.(*PackWriterCloser)
 				if !v.init {
-					//log.Debugf("cache.send: %v", v.w.Info())
+					log.Debugf("cache.send: %v", v.w.Info())
 					if err = s.cache.Send(v.w); err != nil {
 						log.Debugf("[%s] send cache packet error: %v, remove", v.w.Info(), err)
 						s.ws.Delete(key)
@@ -384,8 +385,8 @@ func (s *StreamService) TransStart() {
 					v.init = true
 				} else {
 					newPacket := p
-					//writeType := reflect.TypeOf(v.w)
-					//log.Debugf("w.Write: type=%v, %v", writeType, v.w.Info())
+					writeType := reflect.TypeOf(v.w)
+					log.Debugf("w.Write: type=%v, %v", writeType, v.w.Info())
 					if err = v.w.Write(&newPacket); err != nil {
 						log.Debugf("[%s] write packet error: %v, remove", v.w.Info(), err)
 						s.ws.Delete(key)
