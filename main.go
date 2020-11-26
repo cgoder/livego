@@ -41,7 +41,7 @@ func startHls() *hls.Server {
 
 var rtmpAddr string
 
-func startRtmp(stream *service.StreamServer, hlsServer *hls.Server) {
+func startRtmp(server *service.StreamServer, hlsServer *hls.Server) {
 	rtmpAddr = configure.Config.GetString("rtmp_addr")
 
 	rtmpListen, err := net.Listen("tcp", rtmpAddr)
@@ -52,10 +52,10 @@ func startRtmp(stream *service.StreamServer, hlsServer *hls.Server) {
 	var rtmpServer *rtmp.Server
 
 	if hlsServer == nil {
-		rtmpServer = rtmp.NewRtmpServer(stream, nil)
+		rtmpServer = rtmp.NewRtmpServer(server, nil)
 		log.Info("HLS server disable....")
 	} else {
-		rtmpServer = rtmp.NewRtmpServer(stream, hlsServer)
+		rtmpServer = rtmp.NewRtmpServer(server, hlsServer)
 		log.Info("HLS server enable....")
 	}
 
@@ -68,7 +68,7 @@ func startRtmp(stream *service.StreamServer, hlsServer *hls.Server) {
 	rtmpServer.Serve(rtmpListen)
 }
 
-func startHTTPFlv(stream *service.StreamServer) {
+func startHTTPFlv(server *service.StreamServer) {
 	httpflvAddr := configure.Config.GetString("httpflv_addr")
 
 	flvListen, err := net.Listen("tcp", httpflvAddr)
@@ -76,7 +76,7 @@ func startHTTPFlv(stream *service.StreamServer) {
 		log.Fatal(err)
 	}
 
-	hdlServer := httpflv.NewServer(stream)
+	hdlServer := httpflv.NewServer(server)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -88,7 +88,7 @@ func startHTTPFlv(stream *service.StreamServer) {
 	}()
 }
 
-func startAPI(stream *service.StreamServer) {
+func startAPI(server *service.StreamServer) {
 	apiAddr := configure.Config.GetString("api_addr")
 
 	if apiAddr != "" {
@@ -96,7 +96,7 @@ func startAPI(stream *service.StreamServer) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		opServer := api.NewServer(stream, rtmpAddr)
+		opServer := api.NewServer(server, rtmpAddr)
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -144,15 +144,15 @@ func main() {
 	`, VERSION)
 
 	// 创建流媒体服务器
-	stream := service.NewStreamServers()
+	server := service.NewStreamServers()
 
 	// 开启API服务
-	startAPI(stream)
+	startAPI(server)
 
 	// 启动HLS写流服务
 	hlsServer := startHls()
 	// 启动http-flv写流服务
-	startHTTPFlv(stream)
+	startHTTPFlv(server)
 	// 启动rtmp收流服务
-	startRtmp(stream, hlsServer)
+	startRtmp(server, hlsServer)
 }
