@@ -19,8 +19,8 @@ import (
 
 var VERSION = "master"
 
-func startHls() *hls.Server {
-	hlsAddr := configure.Config.GetString("hls_addr")
+func HlsListenPull() *hls.Server {
+	hlsAddr := configure.Config.GetString(configure.LISTEN_PORT_HLS)
 	hlsListen, err := net.Listen("tcp", hlsAddr)
 	if err != nil {
 		log.Fatal(err)
@@ -33,18 +33,18 @@ func startHls() *hls.Server {
 				log.Error("HLS server panic: ", r)
 			}
 		}()
-		log.Info("HLS listen On ", hlsAddr)
+		log.Info("HLS PULL listen On ", hlsAddr)
 		hlsServer.Serve(hlsListen)
 	}()
 	return hlsServer
 }
 
-var rtmpAddr string
+// var rtmpAddr string
 
-func startRtmp(server *service.StreamServer, hlsServer *hls.Server) {
-	rtmpAddr = configure.Config.GetString("rtmp_addr")
+func RtmpListenPush(server *service.StreamServer, hlsServer *hls.Server) {
+	rtmpListenPort := configure.Config.GetString(configure.LISTEN_PORT_RTMP_PUSH)
 
-	rtmpListen, err := net.Listen("tcp", rtmpAddr)
+	rtmpListen, err := net.Listen("tcp", rtmpListenPort)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -64,12 +64,28 @@ func startRtmp(server *service.StreamServer, hlsServer *hls.Server) {
 			log.Error("RTMP server panic: ", r)
 		}
 	}()
-	log.Info("RTMP Listen On ", rtmpAddr)
+	log.Info("RTMP PUSH Listen On ", rtmpListenPort)
 	rtmpServer.Serve(rtmpListen)
 }
 
-func startHTTPFlv(server *service.StreamServer) {
-	httpflvAddr := configure.Config.GetString("httpflv_addr")
+func ServerPull(streamType service.StreamType) {
+	switch streamType {
+	case service.RtmpPush:
+		// TODO
+	case service.RtmpPull:
+		// TODO
+	case service.RtspPull:
+		// TODO
+	case service.HlsPull:
+		// TODO:
+	case service.HttpFlvPull:
+		// TODO:
+
+	}
+}
+
+func HTTPFlvListenPull(server *service.StreamServer) {
+	httpflvAddr := configure.Config.GetString(configure.LISTEN_PORT_HTTPFLV)
 
 	flvListen, err := net.Listen("tcp", httpflvAddr)
 	if err != nil {
@@ -83,20 +99,21 @@ func startHTTPFlv(server *service.StreamServer) {
 				log.Error("HTTP-FLV server panic: ", r)
 			}
 		}()
-		log.Info("HTTP-FLV listen On ", httpflvAddr)
+		log.Info("HTTP-FLV PULL listen On ", httpflvAddr)
 		hdlServer.Serve(flvListen)
 	}()
 }
 
 func startAPI(server *service.StreamServer) {
-	apiAddr := configure.Config.GetString("api_addr")
-
+	apiAddr := configure.Config.GetString(configure.LISTEN_PORT_API)
+	log.Info("HTTP-API listen port ", apiAddr)
 	if apiAddr != "" {
 		opListen, err := net.Listen("tcp", apiAddr)
 		if err != nil {
 			log.Fatal(err)
 		}
-		opServer := api.NewServer(server, rtmpAddr)
+		rtmpListenPort := configure.Config.GetString(configure.LISTEN_PORT_RTMP_PUSH)
+		opServer := api.NewServer(server, rtmpListenPort)
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -106,6 +123,8 @@ func startAPI(server *service.StreamServer) {
 			log.Info("HTTP-API listen On ", apiAddr)
 			opServer.Serve(opListen)
 		}()
+	} else {
+		log.Info("HTTP-API listen port error")
 	}
 }
 
@@ -148,11 +167,11 @@ func main() {
 
 	// 开启API服务
 	startAPI(server)
-
 	// 启动HLS写流服务
-	hlsServer := startHls()
+	hlsServer := HlsListenPull()
 	// 启动http-flv写流服务
-	startHTTPFlv(server)
+	HTTPFlvListenPull(server)
 	// 启动rtmp收流服务
-	startRtmp(server, hlsServer)
+	RtmpListenPush(server, hlsServer)
+	ServerPull(service.RtmpPush)
 }

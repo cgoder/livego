@@ -11,6 +11,21 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	LISTEN_PORT_RTMP_PUSH = "rtmp_addr"
+	LISTEN_PORT_API       = "api_addr"
+	LISTEN_PORT_HTTPFLV   = "httpflv_addr"
+	LISTEN_PORT_HLS       = "hls_addr"
+
+	REDIS_ADDR = "redis_addr"
+	REDIS_PWD  = "redis_pwd"
+
+	LOG_LEVEL = "level"
+
+	CONFIG_FILE_NAME = "config_file"
+	DIR_FLV          = "flv_dir"
+)
+
 /*
 {
   "server": [
@@ -77,7 +92,7 @@ var defaultConf = ServerCfg{
 var Config = viper.New()
 
 func initLog() {
-	if l, err := log.ParseLevel(Config.GetString("level")); err == nil {
+	if l, err := log.ParseLevel(Config.GetString(LOG_LEVEL)); err == nil {
 		log.SetLevel(l)
 		log.SetReportCaller(l == log.DebugLevel)
 	}
@@ -109,7 +124,7 @@ func init() {
 	Config.BindPFlags(pflag.CommandLine)
 
 	// File
-	Config.SetConfigFile(Config.GetString("config_file"))
+	Config.SetConfigFile(Config.GetString(CONFIG_FILE_NAME))
 	Config.AddConfigPath(".")
 	err := Config.ReadInConfig()
 	if err != nil {

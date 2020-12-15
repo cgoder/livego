@@ -18,6 +18,16 @@ var (
 	EmptyID = ""
 )
 
+type StreamType int
+
+const (
+	RtmpPush StreamType = iota
+	RtmpPull
+	RtspPull
+	HlsPull
+	HttpFlvPull
+)
+
 // 流媒体服务器。包含N个流媒体服务。
 // 每个单独的流媒体服务都可以有多种输入流，多个输出流。
 type StreamServer struct {
